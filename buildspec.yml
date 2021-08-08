@@ -1,0 +1,22 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 12
+    commands:
+      # # Install Node
+      - npm install
+  pre_build:
+    commands:
+      #install dependencies
+      # - echo Installing dependencies...
+      # - npm install
+      # - npm run test
+  build:
+    commands:
+      #build
+      - npm run build
+  post_build:
+    commands:
+       - aws s3 sync build/ s3://aws-demo-aj --acl public-read

@@ -1,0 +1,342 @@
+Parameters:
+  RootDomainName:
+    Description: Domain name for your website 
+    Type: String
+    Default: aws-demo-aj
+  RepositoryBranch:
+    Type: String
+    Default: master
+  AcctId:
+    Type: String
+    Default: '111111111111'
+  Region:
+    Type: String
+    Default: ap-southeast-1
+  CodeCommitRepoName:
+    Type: String
+    Default: aws-cf
+
+Resources:
+  CloudFormationTrustRole:
+    Description: Creating service role in IAM for AWS CloudFormation
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - cloudformation.amazonaws.com
+      Path: /
+      Policies:
+      - PolicyDocument:
+          Statement:
+          - Action:
+            - iam:CreateRole
+            - iam:AttachRolePolicy
+            - iam:PutRolePolicy
+            - iam:PassRole
+            - iam:DetachRolePolicy
+            - iam:ListRolePolicies
+            - iam:GetRole
+            - iam:DeleteRolePolicy
+            - iam:UpdateRoleDescription
+            - iam:ListRoles
+            - iam:DeleteRole
+            - iam:GetRolePolicy
+            - iam:CreateInstanceProfile
+            - iam:AddRoleToInstanceProfile
+            - iam:DeleteInstanceProfile
+            - iam:GetInstanceProfile
+            - iam:ListInstanceProfiles
+            - iam:ListInstanceProfilesForRole
+            - iam:RemoveRoleFromInstanceProfile
+            Effect: Allow
+            Resource:
+            - !Sub "arn:aws:iam::*:role/${AWS::StackName}*"
+            - !Sub "arn:aws:iam::*:instance-profile/${AWS::StackName}*"
+          - Action:
+            - ssm:GetParameters
+            - autoscaling:*
+            - ec2:*
+            - codedeploy:*
+            - elasticloadbalancing:*
+            Effect: Allow
+            Resource: '*'
+        PolicyName: !Join
+          - '-'
+          -  - !Ref 'AWS::StackName'
+             - CloudFormationRolePolicy
+      RoleName: !Join
+        - '-'
+        -  - !Ref 'AWS::StackName'
+           - CloudFormation
+    Type: AWS::IAM::Role
+
+  RootBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName:
+        Ref: RootDomainName
+      AccessControl: PublicRead
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket:
+        Ref: RootBucket
+      PolicyDocument:
+        Statement:
+          - Action:
+              - s3:*
+            Effect: Allow
+            Resource:
+              Fn::Join:
+                - ''
+                - - 'arn:aws:s3:::'
+                  - Ref: RootBucket
+                  - '/*'
+            Principal: '*' 
+  CodeBuildRole:
+    Description: Creating service role in IAM for AWS CodeBuild
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: codebuild.amazonaws.com
+      Path: /
+      RoleName: !Join
+        - '-'
+        - - !Ref 'AWS::StackName'
+          - CodeBuild
+    Type: AWS::IAM::Role
+  CodeBuildPolicy:
+    Description: Setting IAM policy for service role for CodeBuild
+    Properties:
+      PolicyDocument:
+        Statement:
+        - Action:
+          - logs:CreateLogGroup
+          - logs:CreateLogStream
+          - logs:PutLogEvents
+          Effect: Allow
+          Resource: '*'
+        - Action:
+          - s3:PutObject
+          - s3:GetObject
+          - s3:GetObjectVersion
+          Effect: Allow
+          Resource:
+          - !Join
+            - ''
+            - - 'arn:aws:s3:::'
+              - !Ref 'RootBucket'
+          - !Join
+            - ''
+            - - 'arn:aws:s3:::'
+              - !Ref 'RootBucket'
+              - /*
+
+        - Action:
+          - codecommit:GitPull
+          Effect: Allow
+          Resource:
+          - !Join
+            - ':'
+            - - arn
+              - aws
+              - codecommit
+              - !Ref Region
+              - !Ref AcctId
+              - !Ref CodeCommitRepoName
+      PolicyName: !Join
+        - '-'
+        -  - !Ref 'AWS::StackName'
+           - CodeBuildPolicy
+      Roles:
+      - !Ref 'CodeBuildRole'
+    Type: AWS::IAM::Policy
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    DependsOn: CodeBuildPolicy
+    Properties: 
+      Name: !Ref AWS::StackName
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Environment: 
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:5.0
+        Type: LINUX_CONTAINER
+      ServiceRole: !Ref 'CodeBuildRole'
+      Source: 
+        Type: CODECOMMIT
+        Location: https://git-codecommit.ap-southeast-1.amazonaws.com/v1/repos/aws-cf
+      SourceVersion: refs/heads/master
+      LogsConfig:
+        CloudWatchLogs: 
+          Status: ENABLED
+        S3Logs: 
+          Status: DISABLED
+
+  ReleasePipeline:
+    DependsOn:
+    - CodePipelineTrustRole
+    - RootBucket
+    - CodeBuildProject
+    - CloudFormationTrustRole
+    Description: Creating a deployment pipeline for your project in AWS CodePipeline
+    Properties:
+      ArtifactStore:
+        Location: !Ref 'RootBucket'
+        Type: S3
+      Name: !Ref 'AWS::StackName'
+      RoleArn: !GetAtt
+      - CodePipelineTrustRole
+      - Arn
+      Stages:
+      - Name: Source
+        Actions:
+        - ActionTypeId:
+            Category: Source
+            Owner: AWS
+            Provider: CodeCommit
+            Version: 1
+          Configuration:
+            BranchName: master
+            PollForSourceChanges: false
+            RepositoryName: !Ref CodeCommitRepoName
+          InputArtifacts: [
+            ]
+          Name: ApplicationSource
+          OutputArtifacts:
+          - Name: !Join
+            - '-'
+            - - !Ref 'AWS::StackName'
+              - SourceArtifact
+          RunOrder: 1
+      - Name: Build
+        Actions:
+        - ActionTypeId:
+            Category: Build
+            Owner: AWS
+            Provider: CodeBuild
+            Version: 1
+          Configuration:
+            ProjectName: !Ref 'AWS::StackName'
+          InputArtifacts:
+          - Name: !Join
+            - '-'
+            - - !Ref 'AWS::StackName'
+              - SourceArtifact
+          Name: Build
+          OutputArtifacts:
+          - Name: !Join
+            - '-'
+            - - !Ref 'AWS::StackName'
+              - BuildArtifact
+          RunOrder: 1
+    Type: AWS::CodePipeline::Pipeline
+
+  CodePipelineTrustRole:
+    Description: Creating service role in IAM for AWS CodePipeline
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - codepipeline.amazonaws.com
+          Sid: 1
+      Path: /
+      Policies:
+      - PolicyDocument:
+          Statement:
+          - Action:
+            - s3:GetObject
+            - s3:GetObjectVersion
+            - s3:GetBucketVersioning
+            - s3:PutObject
+            Effect: Allow
+            Resource:
+            - !Join
+              - ''
+              - - 'arn:aws:s3:::'
+                - !Ref 'RootBucket'
+            - !Join
+              - ''
+              - - 'arn:aws:s3:::'
+                - !Ref 'RootBucket'
+                - /*
+          - Action:
+            - codebuild:StartBuild
+            - codebuild:BatchGetBuilds
+            - codebuild:StopBuild
+            Effect: Allow
+            Resource:
+            - !GetAtt 'CodeBuildProject.Arn'
+          - Action:
+            - cloudformation:DescribeStacks
+            - cloudformation:DescribeChangeSet
+            - cloudformation:CreateChangeSet
+            - cloudformation:DeleteChangeSet
+            - cloudformation:ExecuteChangeSet
+            Effect: Allow
+            Resource:
+            - !Join
+              - ':'
+              - - arn
+                - aws
+                - cloudformation
+                - !Ref Region
+                - !Ref AcctId
+                - !Join
+                  - /
+                  - - stack
+                    - !Join
+                      - '-'
+                      -  - !Ref 'AWS::StackName'
+                         - '*'
+          - Action:
+            - iam:PassRole
+            Effect: Allow
+            Resource:
+            - !GetAtt
+              - CloudFormationTrustRole
+              - Arn
+          - Action:
+            - codecommit:UploadArchive
+            - codecommit:GetUploadArchiveStatus
+            - codecommit:GetCommit
+            - codecommit:GetRepository
+            - codecommit:GetBranch
+            Effect: Allow
+            Resource:
+            - !Join
+              - ':'
+              - - arn  
+                - aws
+                - codecommit
+                - !Ref Region
+                - !Ref AcctId
+                - !Ref CodeCommitRepoName
+
+        PolicyName: !Join
+          - '-'
+          - - !Ref 'AWS::StackName'
+            - CodePipelineRolePolicy
+      RoleName: !Join
+        - '-'
+        - - !Ref 'AWS::StackName'
+          - CodePipeline
+    Type: AWS::IAM::Role
+
+Outputs:
+  WebsiteURL:
+    Value:
+      Fn::GetAtt: RootBucket.WebsiteURL
+    Description: URL for website hosted on S3
