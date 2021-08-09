@@ -1,11 +1,8 @@
 Parameters:
   RootDomainName:
-    Description: Domain name for your website 
+    Description: Name of your Domain/project
     Type: String
     Default: aws-demo-aj
-  RepositoryBranch:
-    Type: String
-    Default: master
   AcctId:
     Type: String
     Default: '111111111111'
@@ -15,6 +12,9 @@ Parameters:
   CodeCommitRepoName:
     Type: String
     Default: aws-cf
+  RepoURL:
+    Type: String
+    Default: https://git-codecommit.ap-southeast-1.amazonaws.com/v1/repos/aws-cf
 
 Resources:
   CloudFormationTrustRole:
@@ -174,7 +174,7 @@ Resources:
       ServiceRole: !Ref 'CodeBuildRole'
       Source: 
         Type: CODECOMMIT
-        Location: https://git-codecommit.ap-southeast-1.amazonaws.com/v1/repos/aws-cf
+        Location: !Ref RepoURL
       SourceVersion: refs/heads/master
       LogsConfig:
         CloudWatchLogs: 

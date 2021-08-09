@@ -1,70 +1,60 @@
-# Getting Started with Create React App
+# This is a simple react CRUD page that uses aws cloudformation.
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+This is a simple react CRUD that uses a cloudformation template to create resource for CI/CD. The page is deployed to an S3 bucket. You *need* an aws account to run this project.
 
-## Available Scripts
+For more info, please look at the `cf.yml` file.
 
-In the project directory, you can run:
 
-### `npm start`
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+## Installation
+1. Create a new repository on AWS CodeCommit with these files.
+2. In the cf.yml, replace the parameters for `RootDomainName`, `AcctId`, `Region`, `CodeCommitRepoName` and `RepoURL`.
+```
+Parameters:
+  RootDomainName:
+    Description: Domain name for your website 
+    Type: String
+    Default: aws-demo-aj
+  RepositoryBranch:
+    Type: String
+    Default: master
+  AcctId:
+    Type: String
+    Default: '111111111111'
+  Region:
+    Type: String
+    Default: ap-southeast-1
+  CodeCommitRepoName:
+    Type: String
+    Default: aws-cf
+  RepoURL:
+    Type: String
+    Default: https://git-codecommit.ap-southeast-1.amazonaws.com/v1/repos/aws-cf
+```
+3. In the buildspec.yml, add the name of your s3 bucket. It *must* be the same with your `RootDomainName`.
+```
+  post_build:
+    commands:
+       - aws s3 sync build/ s3://<RootDomainName> --acl public-read
+```
 
-The page will reload if you make edits.\
-You will also see any lint errors in the console.
+The template will create the following resources:
+1. S3 Bucket
+2. CodeBuild Project
+3. Code Pipeline
 
-### `npm test`
+Along with these resources, policies and roles will also be created. 
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## Usage
 
-### `npm run build`
+For the CI/CD to work, we need to create a cloudformation stack first. 
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+### `aws cloudformation create-stack --stack-name  demo --template-body file://cf.yml --capabilities CAPABILITY_NAMED_IAM`
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+Replace `demo` with whatever stackname you want to use.
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+To remove,
+### `aws cloudformation delete-stack --stackname demo`
 
-### `npm run eject`
+After this, All pushed changes will trigger the CI/CD and automatically deploy changes to S3. Please also note that the s3 is public. 
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
-
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
-
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
