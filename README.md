@@ -53,6 +53,11 @@ For the CI/CD to work, we need to create a cloudformation stack first.
 
 Replace `demo` with whatever stackname you want to use.
 
+To verify that the resources are successfully created, check your cloudformation stack events log.
+  ![ScreenShot](/docs/cf.PNG)
+
+
+
 To remove,
 ### `aws cloudformation delete-stack --stackname demo`
 
